@@ -11,69 +11,63 @@ var downloadSpecs = {url: "", filename: "", saveAs: true};
 
 /**
  * ===============================================
- * Downloader Functions which should only be run once
+ * Actions to Take Upon Clicking Page Action
  * ===============================================
  */
-function downloadFunction(){ 
-    console.log(downloadSpecs)
+function downloadFunction(tabNumber){ 
+
+
+    /** 
+     * 1. Send message to content_script.js
+     *    (1) Parse DOM for track metadata
+     *    (2) Send back metadata
+     * 2. Update filename in downloadSpecs
+     * 3. Launch download dialog
+     */
+
+    // Step 1 -- Send Message
+    chrome.tabs.sendMessage(
+	tabNumber,  // ID of tab to send message to
+	{sendBack: "trackDataJSON"},  // Request spec (listener in content script knows how to interpret)
+	function(trackDataJSON) {
+
+	    // Parse metadata out of stringified JSON
+	    var d = JSON.parse(trackDataJSON);
+	    console.log("Parsed Track Metadata");
+	    console.log(d);
+
+	    // Make Filename
+	    var unsafeFilename = d.artistSummary +"_"+ d.songTitle +"_"+ d.albumTitle;
+	    var filename = unsafeFilename.replace(/\s/g, "-").replace(filenameRegex,"") + ".m4a";
+
+	    // Step 2 -- Update download specs
+	    downloadSpecs.filename = filename;
+	    console.log("Filename: "+ filename);
+
+	});
+
+    // Step 3 -- Initiate Download with updated specs
     chrome.downloads.download(downloadSpecs); 
 }
-
-chrome.pageAction.onClicked.addListener(
-    function (tabNumber){downloadFunction();}
-);
 
 
 /** 
  * ==============================================
- * 
+ * Automatic Actions
  * ==============================================
  */ 
 
-function trackDownloadHandler(trackURL, filename, tabInfo){
-
-    // Show page action
-    chrome.pageAction.show(tabInfo.id);
-    // Update global download specs
-    downloadSpecs.url = trackURL;
-    downloadSpecs.filename = filename;
-}
-
-
-function pandoraTrackHandler(trackURL, trackDataJSON, tabInfo){
-    // Stuff to call when there is a matching xmlhttprequest
-    console.log("Track URL: "+ trackURL);
-    console.log("Track Metadata: ");
-    console.log(trackDataJSON);
-
-    // Parse metadata out of stringified JSON
-    var d = JSON.parse(trackDataJSON);
-    console.log(d);
-
-    // Process filename to make Unix-safe
-    var unsafeFilename = d.artistSummary +"_"+ d.songTitle +"_"+ d.albumTitle;
-    var filename = unsafeFilename.replace(/\s/g, "-").replace(filenameRegex,"") + ".m4a";
-
-    // Call function to  set up downloading file
-    trackDownloadHandler(trackURL, filename, tabInfo);
-
-}
-
-
 function pandoraWebRequestHandler(tabInfo, details){
+    /**
+     * Upon web request:
+     *   1. Retrieve and sanitize track URL
+     *   2. Update global download specs object
+     *   3. Show page action icon
+     */
 
-    // Step 1 -- Capture URL (and knock out lid)
     var trackURL = details.url.replace(userIDRegex, "$1$3");
-
-    // Step 2 -- Get track details from content script
-    chrome.tabs.sendMessage(
-	tabInfo.id,  // ID of tab to send message to
-	{sendBack: "trackDataJSON"},  // Request spec (listener in content script knows how to interpret)
-
-	function(trackDataJSON) {
-	    pandoraTrackHandler(trackURL, trackDataJSON, tabInfo);
-	});
-    
+    downloadSpecs.url = trackURL;
+    chrome.pageAction.show(tabInfo.id);
 }
 
 function pandoraWebRequestAttachment(tabInfo){
@@ -84,9 +78,11 @@ function pandoraWebRequestAttachment(tabInfo){
     // Attach the web request
     chrome.webRequest.onCompleted.addListener(
    	// Dispatch function --> Calls pandoraWebRequestHandler
-   	function(details){ pandoraWebRequestHandler(tabInfo, details); },
+   	function(details){ 
+	    pandoraWebRequestHandler(tabInfo, details); 
+	},
+	// Filters
 	{ "urls": ["http://*/access/?version=*&lid=*&token=*"],
-   	  "types": ["other"], 
 	  "tabId": tabInfo.id } 
     );
 }
@@ -119,3 +115,8 @@ function tabCreatedWrapper(createdTabInfo) {
 
 // Listen for new tabs being created
 chrome.tabs.onCreated.addListener(tabCreatedWrapper);
+
+// Page action onClick Listner
+chrome.pageAction.onClicked.addListener(
+    function (tabNumber){downloadFunction(tabNumber);}
+);
