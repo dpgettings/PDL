@@ -3,19 +3,24 @@ var backgroundPage = chrome.extension.getBackgroundPage();
 var console = backgroundPage.console;
 var window = backgroundPage.window;
 
+// Pre-compilation of various regular expressions
 var pandoraRegex = new RegExp("^(http[s]?:\\/\\/((.)*\\.))pandora.com");
 var userIDRegex = /(^http.+version=4&lid=)(\d{8})(&token=.+$)/;
 var filenameRegex = /[^A-Za-z0-9_-]/g;
 
-var downloadSpecs = {url: "", filename: "", saveAs: true};
+// Initial specs of file download
+//var downloadSpecs = {url: "", filename: "", saveAs: true};
+var downloadSpecs = {url: "", filename: "", saveAs: false};
 
 /**
  * ===============================================
  * Actions to Take Upon Clicking Page Action
  * ===============================================
  */
-function downloadFunction(tabNumber){ 
+function downloadFunction(tabDetails){ 
 
+    //console.log("Tab details: ");
+    //console.log(tabDetails);
 
     /** 
      * 1. Send message to content_script.js
@@ -27,14 +32,14 @@ function downloadFunction(tabNumber){
 
     // Step 1 -- Send Message
     chrome.tabs.sendMessage(
-	tabNumber,  // ID of tab to send message to
+	tabDetails.id,  // ID of tab to send message to
 	{sendBack: "trackDataJSON"},  // Request spec (listener in content script knows how to interpret)
 	function(trackDataJSON) {
 
 	    // Parse metadata out of stringified JSON
 	    var d = JSON.parse(trackDataJSON);
-	    console.log("Parsed Track Metadata");
-	    console.log(d);
+	    //console.log("Parsed Track Metadata");
+	    //console.log(d);
 
 	    // Make Filename
 	    var unsafeFilename = d.artistSummary +"_"+ d.songTitle +"_"+ d.albumTitle;
@@ -42,12 +47,11 @@ function downloadFunction(tabNumber){
 
 	    // Step 2 -- Update download specs
 	    downloadSpecs.filename = filename;
-	    console.log("Filename: "+ filename);
+	    //console.log("Filename: "+ filename);
 
+	    // Step 3 -- Initiate Download with updated specs
+	    chrome.downloads.download(downloadSpecs); 
 	});
-
-    // Step 3 -- Initiate Download with updated specs
-    chrome.downloads.download(downloadSpecs); 
 }
 
 
@@ -71,9 +75,9 @@ function pandoraWebRequestHandler(tabInfo, details){
 }
 
 function pandoraWebRequestAttachment(tabInfo){
-    console.log("Pandora tab active: "+ tabInfo.active);
-    console.log("Attaching webRequest listener for tab "+ tabInfo.id);
-    console.log("------------------------------------------");
+    // console.log("Pandora tab active: "+ tabInfo.active);
+    // console.log("Attaching webRequest listener for tab "+ tabInfo.id);
+    // console.log("------------------------------------------");
     
     // Attach the web request
     chrome.webRequest.onCompleted.addListener(
@@ -98,7 +102,6 @@ function tabCreatedWrapper(createdTabInfo) {
 	 * Listens for when a previously created Chrome tab navigates to Pandora, 
 	 * then injects songscraper.js into the Pandora page.
 	 */
-	
 	var tabUrl =  tabInfo.url;
 	var tabStatus =  changeInfo.status;
 	
@@ -118,5 +121,5 @@ chrome.tabs.onCreated.addListener(tabCreatedWrapper);
 
 // Page action onClick Listner
 chrome.pageAction.onClicked.addListener(
-    function (tabNumber){downloadFunction(tabNumber);}
+    function (tabDetails){downloadFunction(tabDetails);}
 );
