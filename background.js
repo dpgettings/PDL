@@ -4,13 +4,13 @@ var console = backgroundPage.console;
 var window = backgroundPage.window;
 
 // Pre-compilation of various regular expressions
-var pandoraRegex = new RegExp("^(http[s]?:\\/\\/((.)*\\.))pandora.com");
+var pdlRegex = new RegExp("^(http[s]?:\\/\\/((.)*\\.))pandora.com");
 var userIDRegex = /(^http.+version=4&lid=)(\d{8})(&token=.+$)/;
 var filenameRegex = /[^A-Za-z0-9_-]/g;
 
 // Initial specs of file download
-//var downloadSpecs = {url: "", filename: "", saveAs: true};
-var downloadSpecs = {url: "", filename: "", saveAs: false};
+var downloadSpecs = {url: "", filename: "", saveAs: true};
+//var downloadSpecs = {url: "", filename: "", saveAs: false};
 
 /**
  * ===============================================
@@ -18,9 +18,6 @@ var downloadSpecs = {url: "", filename: "", saveAs: false};
  * ===============================================
  */
 function downloadFunction(tabDetails){ 
-
-    //console.log("Tab details: ");
-    //console.log(tabDetails);
 
     /** 
      * 1. Send message to content_script.js
@@ -38,8 +35,6 @@ function downloadFunction(tabDetails){
 
 	    // Parse metadata out of stringified JSON
 	    var d = JSON.parse(trackDataJSON);
-	    //console.log("Parsed Track Metadata");
-	    //console.log(d);
 
 	    // Make Filename
 	    var unsafeFilename = d.artistSummary +"_"+ d.songTitle +"_"+ d.albumTitle;
@@ -47,7 +42,6 @@ function downloadFunction(tabDetails){
 
 	    // Step 2 -- Update download specs
 	    downloadSpecs.filename = filename;
-	    //console.log("Filename: "+ filename);
 
 	    // Step 3 -- Initiate Download with updated specs
 	    chrome.downloads.download(downloadSpecs); 
@@ -61,7 +55,7 @@ function downloadFunction(tabDetails){
  * ==============================================
  */ 
 
-function pandoraWebRequestHandler(tabInfo, details){
+function pdlWebRequestHandler(tabInfo, details){
     /**
      * Upon web request:
      *   1. Retrieve and sanitize track URL
@@ -74,16 +68,13 @@ function pandoraWebRequestHandler(tabInfo, details){
     chrome.pageAction.show(tabInfo.id);
 }
 
-function pandoraWebRequestAttachment(tabInfo){
-    // console.log("Pandora tab active: "+ tabInfo.active);
-    // console.log("Attaching webRequest listener for tab "+ tabInfo.id);
-    // console.log("------------------------------------------");
-    
+function pdlWebRequestAttachment(tabInfo){
+
     // Attach the web request
     chrome.webRequest.onCompleted.addListener(
-   	// Dispatch function --> Calls pandoraWebRequestHandler
+   	// Dispatch function --> Calls pdlWebRequestHandler
    	function(details){ 
-	    pandoraWebRequestHandler(tabInfo, details); 
+	    pdlWebRequestHandler(tabInfo, details); 
 	},
 	// Filters
 	{ "urls": ["http://*/access/?version=*&lid=*&token=*"],
@@ -94,21 +85,16 @@ function pandoraWebRequestAttachment(tabInfo){
 
 function tabCreatedWrapper(createdTabInfo) {
 
-    // Flag to indicate we've already detected a tab navigating to Pandora
-    //var alreadyUpdated = false;
-
     function tabUpdatedWrapper(tabId, changeInfo, tabInfo) {
 	/**
-	 * Listens for when a previously created Chrome tab navigates to Pandora, 
-	 * then injects songscraper.js into the Pandora page.
+	 * Listens for when a previously created Chrome tab navigates to Pdl
+	 * then attaches webRequest listener
 	 */
 	var tabUrl =  tabInfo.url;
 	var tabStatus =  changeInfo.status;
 	
-	//if (pandoraRegex.test(tabUrl) && tabStatus==="complete" && (!alreadyUpdated)) {
-	if (pandoraRegex.test(tabUrl) && tabStatus==="complete") {
-	    pandoraWebRequestAttachment(tabInfo);
-	    //alreadyUpdated = true;  // Reset flag indicating we've already updated
+	if (pdlRegex.test(tabUrl) && tabStatus==="complete") {
+	    pdlWebRequestAttachment(tabInfo);
 	}
     }
     
@@ -116,10 +102,18 @@ function tabCreatedWrapper(createdTabInfo) {
     chrome.tabs.onUpdated.addListener(tabUpdatedWrapper);
 }
 
-// Listen for new tabs being created
+
+
+
+/** 
+ * ----------------------------
+ * Listeners in Global Scope
+ * ----------------------------
+ */
+// Fires on creation of any new tab
 chrome.tabs.onCreated.addListener(tabCreatedWrapper);
 
-// Page action onClick Listner
+// Fires on clicking the PDL page action
 chrome.pageAction.onClicked.addListener(
     function (tabDetails){downloadFunction(tabDetails);}
 );
