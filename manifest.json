@@ -14,7 +14,7 @@
     },
     
     "permissions": [
-	"http://*/*",  // No better way to allow permissions on all the CDN pages
+	"http://*/*",  
 	"tabs",
 	"webRequest",
 	"downloads"
